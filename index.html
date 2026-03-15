@@ -336,18 +336,24 @@ window.addEventListener('resize', checkLayoutOverflow);
       ]
     };
 
+    // ---- 9 PLAYER NAMES (3 per team) ----
     const TEAM_NAMES = ['team sharks', 'team fish', 'team crabs'];
-    const PLAYER_NAMES = ['birdy', 'calico', 'lilac', 'trey', 'bones', 'daisy'];
+    const PLAYER_NAMES = ['birdy', 'calico', 'steve', 'lilac', 'trey', 'chicken', 'bones', 'daisy', 'jockey'];
 
     // ---------- INITIAL STATE (may be overwritten by localStorage) ----------
     let teams = TEAM_NAMES.map((name, i) => ({ id: `team${i}`, name, score: 0 }));
+    
+    // 9 players: team0 (slots 0,1,2) ; team1 (slots 0,1,2) ; team2 (slots 0,1,2)
     let players = [
       { id: 'p0', name: PLAYER_NAMES[0], score: 0, teamId: 'team0', slot: 0 },
       { id: 'p1', name: PLAYER_NAMES[1], score: 0, teamId: 'team0', slot: 1 },
-      { id: 'p2', name: PLAYER_NAMES[2], score: 0, teamId: 'team1', slot: 0 },
-      { id: 'p3', name: PLAYER_NAMES[3], score: 0, teamId: 'team1', slot: 1 },
-      { id: 'p4', name: PLAYER_NAMES[4], score: 0, teamId: 'team2', slot: 0 },
-      { id: 'p5', name: PLAYER_NAMES[5], score: 0, teamId: 'team2', slot: 1 }
+      { id: 'p2', name: PLAYER_NAMES[2], score: 0, teamId: 'team0', slot: 2 }, // steve
+      { id: 'p3', name: PLAYER_NAMES[3], score: 0, teamId: 'team1', slot: 0 },
+      { id: 'p4', name: PLAYER_NAMES[4], score: 0, teamId: 'team1', slot: 1 },
+      { id: 'p5', name: PLAYER_NAMES[5], score: 0, teamId: 'team1', slot: 2 }, // chicken
+      { id: 'p6', name: PLAYER_NAMES[6], score: 0, teamId: 'team2', slot: 0 },
+      { id: 'p7', name: PLAYER_NAMES[7], score: 0, teamId: 'team2', slot: 1 },
+      { id: 'p8', name: PLAYER_NAMES[8], score: 0, teamId: 'team2', slot: 2 }  // jockey
     ];
 
     function generateCategories() {
@@ -389,10 +395,60 @@ window.addEventListener('resize', checkLayoutOverflow);
       }
     }
 
+    // ---------- ensure we always have 9 players (migration) ----------
+    function ensureNinePlayers() {
+      const defaultNamesByTeamSlot = [
+        ['birdy', 'calico', 'steve'],
+        ['lilac', 'trey', 'chicken'],
+        ['bones', 'daisy', 'jockey']
+      ];
+      const existingByKey = new Map();
+      players.forEach(p => existingByKey.set(`${p.teamId}-${p.slot}`, p));
+
+      const newPlayers = [];
+      const usedIds = new Set(players.map(p => p.id));
+      let nextIdNum = 0;
+      // find max numeric id like p<number>
+      players.forEach(p => {
+        const match = p.id.match(/^p(\d+)$/);
+        if (match) nextIdNum = Math.max(nextIdNum, parseInt(match[1],10) + 1);
+      });
+
+      for (let t = 0; t < 3; t++) {
+        const teamId = `team${t}`;
+        for (let s = 0; s < 3; s++) {
+          const key = `${teamId}-${s}`;
+          if (existingByKey.has(key)) {
+            newPlayers.push(existingByKey.get(key));
+          } else {
+            // create new player
+            let newId;
+            do {
+              newId = `p${nextIdNum++}`;
+            } while (usedIds.has(newId));
+            usedIds.add(newId);
+            const newPlayer = {
+              id: newId,
+              name: defaultNamesByTeamSlot[t][s],
+              score: 0,
+              teamId: teamId,
+              slot: s
+            };
+            newPlayers.push(newPlayer);
+          }
+        }
+      }
+      players = newPlayers;
+    }
+
     loadState(); // restore previous state
+    ensureNinePlayers(); // migrate to 9 players if needed
 
     let editMode = false;
     let selectedCard = null;
+
+    // Team colors used in right column and now also for settings player inputs
+    const teamColors = ['#8B6B4A', '#6B944A', '#5A7A5A']; // team0 light brown, team1 light green, team2 darker green
 
     function renderAll() {
       renderScoreboard();
@@ -403,11 +459,12 @@ window.addEventListener('resize', checkLayoutOverflow);
       saveState(); // persist after every render
     }
 
-    // ---------- SCOREBOARD (dark green text, medium green borders, dark brown headings) ----------
+    // ---------- SCOREBOARD (dark brown rank circles for 4+) ----------
     function renderScoreboard() {
       const sortedTeams = [...teams].sort((a,b) => b.score - a.score);
       const sortedPlayers = [...players].sort((a,b) => b.score - a.score);
-      const rankColors = ['#E0A82D','#8A8A8A','#B8860B','#5A7A4A','#5A7A4A','#5A7A4A'];
+      // rankColors: first three distinct, then dark brown (#6B4F3A) for rest
+      const rankColors = ['#E0A82D','#8A8A8A','#B8860B','#6B4F3A','#6B4F3A','#6B4F3A','#6B4F3A','#6B4F3A','#6B4F3A'];
 
       let teamHtml = '';
       sortedTeams.forEach((team, idx) => {
@@ -436,24 +493,24 @@ window.addEventListener('resize', checkLayoutOverflow);
       document.getElementById('playerRankings').innerHTML = `<h3 class="text-xl mb-4" style="color:#5D3A1A; font-weight:900;">PLAYER RANKINGS</h3>${playerHtml}`;
     }
 
-    // ---------- GAME BOARD (7 columns) with new solid colors ----------
+    // ---------- GAME BOARD (7 columns) with updated card colors & medium brown category border (#8B6B4A) ----------
     function renderGameBoard() {
-      // category headers – brown background, white border
+      // category headers – brown background, medium brown border (#8B6B4A)
       const headerHtml = categories.map(cat => {
         const displayName = cat.name || '<span class="filler-white">...</span>';
         if (editMode) {
-          return `<div class="w-full h-24 flex items-center justify-center px-2 text-center rounded-lg" style="background-color:#7A644A; color:white; border:2px solid white;">
+          return `<div class="w-full h-24 flex items-center justify-center px-2 text-center rounded-lg" style="background-color:#7A644A; color:white; border:2px solid #8B6B4A;">
             <textarea class="category-edit-input text-lg leading-tight uppercase" data-cat-id="${cat.id}" maxlength="30" oninput="handleCatEdit(this)">${cat.name}</textarea>
           </div>`;
         } else {
-          return `<div class="w-full h-24 flex items-center justify-center px-4 text-center rounded-lg" style="background-color:#7A644A; color:white; font-weight:700; word-break:break-word; overflow-wrap:break-word; border:2px solid white;">
+          return `<div class="w-full h-24 flex items-center justify-center px-4 text-center rounded-lg" style="background-color:#7A644A; color:white; font-weight:700; word-break:break-word; overflow-wrap:break-word; border:2px solid #8B6B4A;">
             <span class="text-lg leading-tight uppercase" style="word-break:break-word; font-weight:700;">${displayName}</span>
           </div>`;
         }
       }).join('');
       document.getElementById('categoryHeaders').innerHTML = headerHtml;
 
-      // point cards grid (5 rows, 7 columns) – new saturated green for 300-500
+      // point cards grid (5 rows, 7 columns) – updated point colors
       const rows = [0,1,2,3,4];
       let gridHtml = '';
       rows.forEach(rowIdx => {
@@ -466,11 +523,11 @@ window.addEventListener('resize', checkLayoutOverflow);
             bgColor = '#7A644A'; // brown
           } else {
             switch(card.points) {
-              case 100: bgColor = '#a87b38'; break;
-              case 200: bgColor = '#b08e45'; break;
-              case 300: bgColor = '#8FC04D'; break; // brighter green
-              case 400: bgColor = '#6A9944'; break; // medium green
-              case 500: bgColor = '#3F6B2B'; break; // dark green
+              case 100: bgColor = '#997033'; break;
+              case 200: bgColor = '#B08E45'; break;
+              case 300: bgColor = '#A0CA68'; break; 
+              case 400: bgColor = '#76A94C'; break; 
+              case 500: bgColor = '#56923A'; break; 
               default: bgColor = '#8AB56B';
             }
           }
@@ -571,9 +628,8 @@ window.addEventListener('resize', checkLayoutOverflow);
       }
     };
 
-    // ---------- TEAM & PLAYER SECTION (lighter Minecraft colors) ----------
+    // ---------- TEAM & PLAYER SECTION (3 players per team) ----------
     function renderTeamPlayerSection() {
-      const teamColors = ['#8B6B4A', '#6B944A', '#5A7A5A']; // lighter brown, lighter green, lighter dark green
       let html = '';
       teams.forEach((team, idx) => {
         const teamPlayers = players.filter(p => p.teamId === team.id).sort((a,b) => a.slot - b.slot);
@@ -591,7 +647,7 @@ window.addEventListener('resize', checkLayoutOverflow);
           <div class="flex gap-3 w-full player-container" data-team-id="${team.id}">
             ${teamPlayers.map(p => {
               const playerDisplay = p.name || '<span class="filler-white">...</span>';
-              return `<div class="player-box flex-1 min-w-[120px] rounded-2xl p-4 flex flex-col items-center gap-3 bouncy-scale" style="background-color:${bg}; box-shadow:0 4px 6px rgba(0,0,0,0.3);" data-player-id="${p.id}" data-slot="${p.slot}" draggable="true">
+              return `<div class="player-box flex-1 min-w-[100px] rounded-2xl p-4 flex flex-col items-center gap-3 bouncy-scale" style="background-color:${bg}; box-shadow:0 4px 6px rgba(0,0,0,0.3);" data-player-id="${p.id}" data-slot="${p.slot}" draggable="true">
                 <h4 class="text-base text-center uppercase truncate w-full" style="color:white; font-weight:900;">${playerDisplay}</h4>
                 <div class="flex items-center gap-2 justify-center w-full">
                   <button class="rounded-full flex items-center justify-center hover:opacity-80 click-scale" style="background:white; width:24px; height:24px;" data-player-id="${p.id}" data-delta="-100">−</button>
@@ -733,18 +789,22 @@ window.addEventListener('resize', checkLayoutOverflow);
       }
     };
 
-    // Settings modal
+    // Settings modal – player inputs now use team colors from right column
     function renderSettingsModalInputs() {
-      const teamColors = ['#8B6B4A', '#6B944A', '#5A7A5A'];
+      // team name inputs (keep existing teamColors)
       let teamHtml = '';
       teams.forEach((team, idx) => {
         teamHtml += `<input type="text" value="${team.name}" data-team-id="${team.id}" maxlength="18" class="settings-input px-4 py-3 rounded-lg outline-none text-center w-full uppercase" style="background-color:${teamColors[idx]}; color:white; font-weight:700;" oninput="handleTeamNameInput(this)" placeholder="...">`;
       });
       document.getElementById('settingsTeamNames').innerHTML = teamHtml;
 
+      // player name inputs – match team color based on player's teamId
       let playerHtml = '';
       players.forEach(player => {
-        playerHtml += `<input type="text" value="${player.name}" data-player-id="${player.id}" maxlength="12" class="settings-input px-4 py-3 rounded-lg outline-none text-center uppercase" style="background-color:#7A5A3A; color:white; font-weight:700;" oninput="handlePlayerNameInput(this)" placeholder="...">`;
+        // find team index to pick color
+        const teamIdx = teams.findIndex(t => t.id === player.teamId);
+        const bgColor = teamIdx >= 0 ? teamColors[teamIdx] : '#7A5A3A'; // fallback just in case
+        playerHtml += `<input type="text" value="${player.name}" data-player-id="${player.id}" maxlength="12" class="settings-input px-4 py-3 rounded-lg outline-none text-center uppercase" style="background-color:${bgColor}; color:white; font-weight:700;" oninput="handlePlayerNameInput(this)" placeholder="...">`;
       });
       document.getElementById('settingsPlayerNames').innerHTML = playerHtml;
     }
@@ -780,7 +840,11 @@ window.addEventListener('resize', checkLayoutOverflow);
 
     document.getElementById('resetToDefaultNamesBtn').addEventListener('click', () => {
       teams.forEach((t, i) => t.name = TEAM_NAMES[i]);
-      players.forEach((p, i) => { p.name = PLAYER_NAMES[i]; p.slot = i % 2; p.teamId = `team${Math.floor(i/2)}`; });
+      players.forEach((p, i) => { 
+        p.name = PLAYER_NAMES[i]; 
+        p.slot = i % 3; 
+        p.teamId = `team${Math.floor(i/3)}`; 
+      });
       renderAll();
       renderSettingsModalInputs();
       saveState();
@@ -796,7 +860,12 @@ window.addEventListener('resize', checkLayoutOverflow);
 
     document.getElementById('resetEverythingBtn').addEventListener('click', () => {
       teams.forEach((t, i) => { t.score = 0; t.name = TEAM_NAMES[i]; });
-      players.forEach((p, i) => { p.score = 0; p.name = PLAYER_NAMES[i]; p.slot = i % 2; p.teamId = `team${Math.floor(i/2)}`; });
+      players.forEach((p, i) => { 
+        p.score = 0; 
+        p.name = PLAYER_NAMES[i]; 
+        p.slot = i % 3; 
+        p.teamId = `team${Math.floor(i/3)}`; 
+      });
       categories = generateCategories();
       renderAll();
       renderSettingsModalInputs();
